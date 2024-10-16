@@ -44,7 +44,7 @@ numAPs = 3; % Number of APs
 % Waveform Generators for each AP & STA
 chanBW = "CBW20";
 numTx = 1; % # of Transmit Antennas
-numRx = 1; % Number of Receive ANtennas
+numRx = 4; % Number of Receive ANtennas
 numSTS = 1; % Number of Space-Time Streams
 numLTFRepetitions = 8; % Number of HE-LTF repetitions
 
