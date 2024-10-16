@@ -51,7 +51,7 @@ pm = propagationModel("raytracing", ...
     "CoordinateSystem","cartesian", ...
     "Method","sbr", ...
     "AngularSeparation","low", ...
-    "MaxNumReflections",0, ...          % No reflections - LOS only
+    "MaxNumReflections",2, ...          % No reflections - LOS only
     "SurfaceMaterial","plasterboard");
 
 rays = raytrace(tx,rx,pm);
@@ -79,7 +79,7 @@ rtChan.ReceiverVirtualVelocity = [0.1;0.1;0];
 % Assign Eb/No value and derive SNR value from it for AWGN
 bitsPerCarrier = 6; % Suppose we're using 64-QAM, which exists for 802.11ac & az
 codeRate = 2/3;     % worst case 1/2, best case 5/6
-EbNo = 80; % In dB
+EbNo = 30; % In dB
 SNR = convertSNR(EbNo,"ebno", ...
   "BitsPerSymbol",bitsPerCarrier, ... % worst case 1, best case 10
   "CodingRate",codeRate);             % worst case 1/2, best case 5/6  
@@ -114,7 +114,7 @@ sampleRate = wlanSampleRate(chanBW);
 % Miscellaneous channel config variables
 chBaseInfo = info(rtChan);
 chDelay = chBaseInfo.ChannelFilterDelay;
-numPaths = size(rays.Interactions, 1); % Number of paths simulated; CHECK THIS!!!
+numPaths = size(rays, 2); % Number of paths simulated
 
 %% Ranging Measurement
 delayULDL = 16e-6; % Time Delay between UL NDP ToA and DL NDP ToD, in seconds
