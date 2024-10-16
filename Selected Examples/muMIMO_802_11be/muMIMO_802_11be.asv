@@ -1,0 +1,218 @@
+%% 802.11be Downlink Multi-User MIMO and OFDMA Throughput Simulation
+% https://www.mathworks.com/help/wlan/ug/802-11be-downlink-ofdma-and-multi-user-mimo-throughput-simulation.html
+% Shows Transmit & Receive Processing for IEEE 802.11be (WiFi 7) Extremely
+%   High Throughput (EHT) multi-user (MU) downlink transmission over a TGax
+%   indoor fading channel
+%
+% Simulated two PPDU types: MU-MIMO & OFDMA
+% For MU-MIMO, all four users share the full band
+% For OFDMA transmission, two users share a large-size multiple resource
+%   unit (MRU) and remaining two are assigned a single resource unit (RU)
+%   each
+
+% Simulates an Access Point (AP) transmitting to four stations (STAs)
+% simultaneously using the EHT MU Packet Format
+
+%% Transmission Configuration
+%%%% MU-MIMO
+% Use wlanEHTMUConfig object to configure transmission of EHT MU Packet
+cfgMUMIMO = wlanEHTMUConfig('CBW80', 'NumUsers', 4); % 80MHz BW, since 996-tone RU
+showAllocation(cfgMUMIMO); % Allocation plot shows a single RU assigned to all 4 users
+
+%%% Configure Transmission Parameters for each user
+numTx = 6;              % # transmit antennas
+guardInterval = 3.2;    % Guard Interval (us)
+ltfType = 4;            % EHT-LTF Type
+apepLength = 1e3;       % APEP length in bytes
+mcs = 4;                % MCS
+
+% Configure common parameters for all users
+cfgMUMIMO.NumTransmitAntennas = numTx;
+cfgMUMIMO.GuardInterval = guardInterval;
+cfgMUMIMO.EHTLTFType = ltfType;
+
+% Configure per-user parameters
+% STA #1
+cfgMUMIMO.User{1}.NumSpaceTimeStreams = 1;
+cfgMUMIMO.User{1}.MCS = mcs;
+cfgMUMIMO.User{1}.APEPLength = apepLength;
+% STA #2
+cfgMUMIMO.User{2}.NumSpaceTimeStreams = 1;
+cfgMUMIMO.User{2}.MCS = mcs;
+cfgMUMIMO.User{2}.APEPLength = apepLength;
+% STA #3
+cfgMUMIMO.User{3}.NumSpaceTimeStreams = 1;
+cfgMUMIMO.User{3}.MCS = mcs;
+cfgMUMIMO.User{3}.APEPLength = apepLength;
+% STA #4
+cfgMUMIMO.User{4}.NumSpaceTimeStreams = 1;
+cfgMUMIMO.User{4}.MCS = mcs;
+cfgMUMIMO.User{4}.APEPLength = apepLength;
+
+%%%% OFDMA
+% Define the OFDMA configuration - 4 users, two on 484+242-tone MRU, one on
+% a 106+26-tone RU, and one on 106-tone RU
+cfgOFDMA = wlanEHTMUConfig([105 50 29 29]); 
+showAllocation(cfgOFDMA); % Shows MRU with 2 Users, 2RUs (each with single user)
+                % Can see that total # of subcarriers used
+                % (484+242+106+26+106=964 subcarriers) is less than MU-MIMO
+                % allocation (996), which allows guards between MRU &
+                % single RU users
+
+% Configure common parameters for all users
+cfgOFDMA.NumTransmitAntennas = numTx;
+cfgOFDMA.GuardInterval = guardInterval;
+cfgOFDMA.EHTLTFType = ltfType;
+
+% Configure per user parameters
+% STA #1 (RU #1)
+cfgOFDMA.User{1}.NumSpaceTimeStreams = 2;
+cfgOFDMA.User{1}.MCS = mcs;
+cfgOFDMA.User{1}.APEPLength = apepLength;
+% STA #2 (RU #1)
+cfgOFDMA.User{2}.NumSpaceTimeStreams = 2;
+cfgOFDMA.User{2}.MCS = mcs;
+cfgOFDMA.User{2}.APEPLength = apepLength;
+% STA #3 (RU #2)
+cfgOFDMA.User{3}.NumSpaceTimeStreams = 2;
+cfgOFDMA.User{3}.MCS = mcs;
+cfgOFDMA.User{3}.APEPLength = apepLength;
+% STA #4 (RU #3)
+cfgOFDMA.User{4}.NumSpaceTimeStreams = 2;
+cfgOFDMA.User{4}.MCS = mcs;
+cfgOFDMA.User{4}.APEPLength = apepLength;
+
+%% Channel Model Configuration
+% A TGax indoor channel model is used in the example. An individual channel
+%   is used to simulate the link between the AP and each user
+tgaxBase = wlanTGaxChannel;
+tgaxBase.DelayProfile = 'Model-B';      % Delay Profile. Model-B is non-LoS
+tgaxBase.NumTransmitAntennas = numTx;   % # Transmit Antennas
+tgaxBase.NumReceiveAntennas = 2;        % Each user has two receive antennas
+tgaxBase.TransmitReceiveDistance = 5;   % Non-Line of Sight Distance
+tgaxBase.ChannelBandwidth = cfgMUMIMO.ChannelBandwidth;
+tgaxBase.SampleRate = wlanSampleRate(cfgMUMIMO);
+% Set a fixed seed for the channel
+tgaxBase.RandomStream = 'mt19937ar with seed';
+tgaxBase.Seed = 5;
+
+% A cell array stores the channel objects, one per user
+numUsers = numel(cfgMUMIMO.User); % Number of users simulated in this example
+tgax = cell(1, numUsers);
+
+% Generate per-user channels
+for userIdx = 1:numUsers
+    tgax{userIdx} = clone(tgaxBase);
+    tgax{userIdx}.UserIndex = userIdx; % Set unique user index
+end
+
+%% Beamforming Feedback
+% Transmit beamforming for both MU-MIMO & OFDMA relies on knowledge of the
+%   channel state btwn TX & RX @ beamformer
+%   To set up channel, each STA provides feedback of the per-subcarrier
+%   channel state using channel sounding.
+% AP transmits a null data packet (NDP), and each STA uses this packet to
+%   determine the channel state (next fed back to AP)
+% The same process is used for the 802.11ax Downlink OFDMA & MU-MIMO Example
+
+% Create an NDP with the correct number of space-time streams to generate
+%   enough LTF symbols
+cfgNDP = wlanEHTMUConfig(tgaxBase.ChannelBandwidth);
+cfgNDP.GuardInterval = guardInterval;
+cfgNDP.EHTLTFType = ltfType;
+cfgNDP.NumTransmitAntennas = cfgMUMIMO.NumTransmitAntennas;
+cfgNDP.User{1}.APEPLength = 0; % No data in an NDP
+cfgNDP.User{1}.NumSpaceTimeStreams = cfgMUMIMO.NumTransmitAntennas;
+
+% Generate NDP Packet - with an empty PSDU as no data
+txNDP = wlanWaveformGenerator([], cfgNDP);
+
+% For each user STA, pass the NDP packet thru channel and calculate the
+%   feedback Channel State (CSI) matrix by SVD
+staFeedback = cell(1, numUsers);
+for userIdx = 1:numel(tgax)
+    % Received waveform at user STA with 50 sample padding. No noise.
+    rx = tgax{userIdx}([txNDP; zeros(50,size(txNDP,2))]);
+
+    % Get the full-band beamforming feedback for a user
+    staFeedback{userIdx} = ehtUserBeamformingFeedback(rx,cfgNDP); % detects the NDP, 
+                            % uses channel estimation to determine the CSI
+                            % Singular Value Decomposition (SVD) is then
+                            % used to calculate beamforming feedback
+end
+
+%% Simulation Settings
+% This example simulates different path losses. We'll set up the same path
+% loss & noise floor to all users.
+cfgSim = struct;
+cfgSim.NumPackets = 10;         % # Packets to simulate for each path loss
+cfgSim.Pathloss = (97:2:103);   % Path loss to simulate in dB
+cfgSim.TransmitPower = 30;      % AP Transmit Power in dBm
+cfgSim.NoiseFloor = -89.9;      % STA noise floor in dBm
+cfgSim.IdleTime = 20;           % Idle Time between packets in us
+
+%% MU-MIMO Simulation
+% To calculate the beamforming matrix for an RU given the CSI feedback for
+%   all users in the MU-MIMO allocation, use the ehtMUCalculateSteeringMatrix
+%   helper.
+% Use a zero forcing solution to calculate the steering matrix within the
+%   helper function
+ruIdx = 1; % Index of hte one and only RU
+steeringMatrix = ehtMUCalculateSteeringMatrix(staFeedback, cfgMUMIMO, cfgNDP, ruIdx);
+
+% Apply the steering matrix to the RU
+cfgMUMIMO.RU{1}.SpatialMapping = 'Custom';
+cfgMUMIMO.RU{1}.SpatialMappingMatrix = steeringMatrix;
+
+% For each packet and path loss simulated, the followign process occurs:
+%{
+    1. A PSDU is created and encoded to create a single packet waveform
+    2. The waveform is passed through an evolving TGax channel model and
+    AWGN is added to the received waveform. Channel state is maintained
+    between packets.
+    3. The packet is detected
+    4. Coarse carrier frequency offset is estimated and corrected
+    5. Fine timing synchronization is established
+    6. Fine carrier frequency offset is estimated and corrected
+    7. The EHT-LTF is extracted from the synchronized received waveform and
+        OFDM demodulated
+    8. The EHT-Data field is extracted from the sync'ed received and OFDM
+        demodulated
+    9. Common pilot phase tracking is performed to track any residual
+        carrier frequency offset
+    10. The phase corrected OFDM symbols are equalized with the channel
+        estimate
+    11. Noise estimation is performed using the demodulated data field
+        pilots and single-stream channel estimate at pilot subcarriers
+    12. The equalized symbols are demodulated and decoded to recover the
+        PSDU
+    13. The recovered PSDU is compared to the transmitted PSDU to determine
+        if the packet has been recovered successfully
+%}
+disp('Simulating MU-MIMO...');
+throughputMUMIMO = ehtMUSimulateScenario(cfgMUMIMO,tgax,cfgSim);
+
+% Plot raw AP throughput of the MU-MIMO simulation
+% Sum throughput for all STAs and plot for all configurations
+figure;
+plot(cfgSim.Pathloss,sum(throughputMUMIMO,2),'-o');
+grid on;
+xlabel('Pathloss (dB)');
+ylabel('Throughput (Mbps)');
+title('Raw AP Throughput of MU-MIMO Transmission');
+
+%% OFDMA Simulation
+%{
+% For each RU, calculate the steering matrix to apply
+for ruIdx = 1:numel(cfgOFDMA.RU)
+    % Calculate the steering matrix to apply to the RU given the feedback
+    steeringMatrix = ehtMUCalculateSteeringMatrix(staFeedback,cfgOFDMA,cfgNDP,ruIdx);
+
+    % Apply the steering matrix to each RU
+    cfgOFDMA.RU{ruIdx}.SpatialMapping = 'Custom';
+    cfgOFDMA.RU{ruIdx}.SpatialMappingMatrix = steeringMatrix;
+end
+disp('Simulating OFDMA...');
+throughputOFDMA = ehtMUSimulateScenario(cfgOFDMA,tgax,cfgSim);
+
+%}
