@@ -327,7 +327,7 @@ methods
 
         numInp = numel(value);
         for i = 1:numInp
-            coder.internal.errorIf(~isa(value{i},'heRangingUser'),'wlan:shared:InvalidUser',numInp,'heRangingUser');
+            coder.internal.errorIf(~isa(value{i},'ranging.heRangingUser'),'wlan:shared:InvalidUser',numInp,'ranging.heRangingUser');
         end
         obj.User = value;
     end
@@ -492,7 +492,7 @@ function user = createUsers(numUsers)
     % Returns a cell array of Users
     Usertmp = cell(1,numUsers);
     for userIdx = 1:numUsers
-        Usertmp{userIdx} = heRangingUser();
+        Usertmp{userIdx} = ranging.heRangingUser();
     end
     user = Usertmp;
 end
