@@ -33,13 +33,13 @@ fc = 5.8e9; % Carrier frequency
 lambda = c/fc;
 spacing = 3/4; % 3/4 Lambda Spacing
 
-numSTAant = 1;  % # of Transmit Antennas (on User Terminal)
+numSTAant = 2;  % # of Transmit Antennas (on User Terminal)
 numAPant = 4;   % # of Receive Antennas (on Base Station)
 txArray = arrayConfig("Size",[1 numSTAant],"ElementSpacing",spacing*lambda);
 rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
 R_a = 20; % Linear Distance between TX and RX
-beta_a = 90-37; % Direction of TX, with respect to RX (in degrees)
+beta_a = 90-89; % Direction of TX, with respect to RX (in degrees)
             % 0 degrees is parallel to the array, on the right-hand side
             %   relative to the X-Z plane visualized by `helperViewArray`
             % 10 degrees moves clockwise about the Z axis 
@@ -245,9 +245,23 @@ end
 
 %% Determine DOA via Naive (Phased Array) Method
 Hest = chanEstActiveSC;
-phase_differences = rad2deg(angle(Hest(:,1,1:4)) - angle(Hest(:,1,[2:4, 1])));
-phase_differences = mod(phase_differences + 180, 360) - 180; % Adjust the result to be within -180 and 180 degrees
-doa = mean(rad2deg(acos(deg2rad(phase_differences)/(2*pi*spacing)))); % pull doa from apa eqn
+phases = rad2deg(unwrap(angle(Hest)));
+
+for i = 1:numSTAant
+    for j = 2:(numAPant)
+        % Check if the next trace on AP is higher/lower (from same STA antenna)
+        if phases(1, i, j) > phases(1, i, j - 1)
+            % Figure out the absolute difference to figure out which mult of 360 should be subtracted
+            interDiff = ceil(abs(phases(1, i, j) - phases(1, i, j - 1)) / 360); 
+            % Subtract 360 to put it all in the same area (to keep deltaPhi constant)
+            phases(:, i, j) = phases(:, i, j) - 360*interDiff;
+        end
+    end
+
+    pdiff(:, i, :) = phases(:, i, 1:end) - phases(:, i, [2:end, 1]); % Subtract each element from each following element in ULA
+end
+doa = mean(rad2deg(acos(deg2rad(pdiff)/(2*pi*spacing))));       % Pull Naive DOA from ULA Steering (Array Factor) equation
+
 
 %% Display results
 disp(['At SNR = ', num2str(SNR), ' dB, estimated distance ', ...
