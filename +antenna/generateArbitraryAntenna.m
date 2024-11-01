@@ -57,7 +57,7 @@ function [aut] = generateArbitraryAntenna(fc, varargin)
     else
         % We've got nothing. Notify the user, but through in a stock antenna.
         helper.dlog("WARNING - NO PATTERN FILE OR THETA-PHI PATTERN SPECIFIED");
-        helper.dlog("PROCEEDING WITH STOCK ANTENNA");
+        helper.dlog("PROCEEDING WITH STOCK MONOPOLE ANTENNA");
 
         stockant = design(monopole, fc);
         % This is way overcomplicating it, but the main reason why we're
