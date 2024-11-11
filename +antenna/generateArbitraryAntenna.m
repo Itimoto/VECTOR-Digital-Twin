@@ -12,6 +12,10 @@ function [aut] = generateArbitraryAntenna(fc, varargin)
     %           thetaphipattern - callback in form of @(theta, phi) that
     %               returns a complex value representing the magnitude and
     %               phase of the element (theta, phi - in degrees)
+    %
+    %           (If loading from Stock Antenna Toolbox Antennas)
+    %           stockantfam - reference to Stock Antenna (e.g. monopole,
+    %               dipole, helix, etc.)
 
     % Parse Inputs
     p = inputParser;
@@ -22,6 +26,8 @@ function [aut] = generateArbitraryAntenna(fc, varargin)
     addOptional(p, 'freqvector', [fc*0.99 fc*1.01]); % Frequency vector describing range for element pattern
     % Pattern generated through (Theta, Phi) (function)
     addOptional(p, 'thetaphipattern', []);          % Complex Callback function through which theta & phi may be accessed
+    % Pattern generated through stock Antenna Toolbox antennas
+    addOptional(p, 'stockantfam', []);              % e.g. `monopole` -> design(monopole, fc)
     parse(p, fc, varargin{:});
 
     % Generate a Custom Antenna Element for the Phased Array
@@ -57,9 +63,15 @@ function [aut] = generateArbitraryAntenna(fc, varargin)
     else
         % We've got nothing. Notify the user, but through in a stock antenna.
         helper.dlog("WARNING - NO PATTERN FILE OR THETA-PHI PATTERN SPECIFIED");
-        helper.dlog("PROCEEDING WITH STOCK MONOPOLE ANTENNA");
 
-        stockant = design(monopole, fc);
+        if ~isempty(p.Results.stockantfam)
+            stockantfam = p.Results.stockantfam;
+        else
+            helper.dlog("WARNING - PROCEEDING WITH STOCK MONOPOLE ANTENNA");
+            stockantfam = monopole;
+        end
+
+        stockant = design(stockantfam, fc);
         % This is way overcomplicating it, but the main reason why we're
         % doing this is to continue working with the `phased.CustomAntennaElement` class
         az = -180:180;
