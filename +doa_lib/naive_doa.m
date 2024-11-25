@@ -12,7 +12,8 @@ function doa = naive_doa(Hest, spacing)
     %
     % INPUTS
     % Hest - CSI Matrix. Dimensions [SUB TX RX]
-    % spacing - Scalar. Spacing between each Antenna Element
+    % spacing - Scalar. Spacing between each Antenna Element (in terms of
+    %                   wavelength lambda)
 
     numSTAant = size(Hest, 2);
     numAPant  = size(Hest, 3);

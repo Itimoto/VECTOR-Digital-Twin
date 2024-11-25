@@ -34,8 +34,8 @@ fc = 5.8e9; % Carrier frequency
 lambda = c/fc;
 spacing = 3/4; % 3/4 Lambda Spacing
 
-numSTAant = 1;  % # of Transmit Antennas (on User Terminal)
-numAPant = 20;   % # of Receive Antennas (on Base Station)
+numSTAant = 2;  % # of Transmit Antennas (on User Terminal)
+numAPant = 4;   % # of Receive Antennas (on Base Station)
 txArray = arrayConfig("Size",[1 numSTAant],"ElementSpacing",spacing*lambda);
 rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
@@ -247,6 +247,14 @@ end
 
 %% Determine DOA via Naive (Phased Array) Method
 doa = doa_lib.naive_doa(chanEstActiveSC, spacing);
+
+%% Determine DOA via Naive (Phased Array) Plus Method
+rxElemPos = helper.getElementPosition(rxArray).'; % Extract Element Positions
+% chanEstActiveSC ~ [S AT AR]
+K = 200; % 200 'snapshots'
+Hest_tmp = permute(chanEstActiveSC, [2 3 1]); % [AT AR S]
+Hest = repmat(Hest_tmp, 1, 1, 1, K);
+[~, doa_plus] = doa_lib.naive_doa_plus(Hest, fc, bw, rxElemPos);
 
 %% Determine DOA via MUSIC
 %Hest = reshape(chanEstActiveSC, numSTAant, numAPant, size(chanEstActiveSC, 1));                         % CSI from Ranging
