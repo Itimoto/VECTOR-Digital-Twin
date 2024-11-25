@@ -37,7 +37,7 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
     end
 
     % Iterate over each snapshot:
-    windowSize = 200; % Number of snapshots in each window
+    windowSize = 100; % Number of snapshots in each window
     doaMUSIC = zeros(AT, 180*3, S, K);
     doaMat = zeros(AT, AR, S, K);
     for k = 1:(K - windowSize + 1)
