@@ -156,8 +156,9 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
     doa = doaK; % Average it out to yield a number
 
     % Plot doaMUSIC:
+    % Visualize over Snapshots:
     for s = 1:1
-        at = 1; %s = 26;
+        at = 1;
         figure;
         theta = linspace(0, 180, 180*3);
         snapshots = 1:(K - windowSize + 1);
@@ -168,5 +169,19 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
         ylabel("DOA (deg)");
         zlabel("Likelihood (dB)");
         title("MUSIC Spectrum over Time for TX: "+at+" and SC: "+s);
+    end
+    % Visualize over Subcarriers:
+    for k = 1:1
+        at = 1;
+        figure;
+        theta = linspace(0, 180, 180*3);
+        subcarriers = 1:S;
+        [X, Y] = meshgrid(subcarriers, theta);
+        musicSpectrum = squeeze(doaMUSIC(at, 1:length(theta), 1:S, k));
+        mesh(X, Y, musicSpectrum);
+        xlabel("Subcarrier (#)");
+        ylabel("DOA (deg)");
+        zlabel("Likelihood (dB)");
+        title("MUSIC Spectrum over Subcarrier for TX: "+at+" and Snapshot: "+k);
     end
 end

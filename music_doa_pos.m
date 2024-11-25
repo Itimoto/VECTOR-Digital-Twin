@@ -40,7 +40,7 @@ txArray = arrayConfig("Size",[1 numSTAant],"ElementSpacing",spacing*lambda);
 rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
 R_a = 1.25; % Linear Distance between TX and RX
-beta_a = 90+20; % Direction of TX, with respect to RX (in degrees)
+beta_a = 90+0; % Direction of TX, with respect to RX (in degrees)
             % 0 degrees is parallel to the array, on the right-hand side
             %   relative to the X-Z plane visualized by `helperViewArray`
             % 10 degrees moves clockwise about the Z axis 
@@ -106,7 +106,7 @@ rtChan.ReceiverVirtualVelocity = [0.1;0.1;0];
 % Assign Eb/No value and derive SNR value from it for AWGN
 bitsPerCarrier = 6; % Suppose we're using 64-QAM, which exists for 802.11ac & az
 codeRate = 2/3;     % worst case 1/2, best case 5/6
-EbNo = 15; % In dB
+EbNo = 10; % In dB
 SNR = convertSNR(EbNo,"ebno", ...
   "BitsPerSymbol",bitsPerCarrier, ... % worst case 1, best case 10
   "CodingRate",codeRate);             % worst case 1/2, best case 5/6  
