@@ -77,7 +77,7 @@ for at = 1:size(Hest, 1)
 
         % Regular Average
         avg = mean(abs(doa_per_snapshot(:, at, ar)));
-        plot(avg*ones(size(doa_per_snapshot, 1)), '-', 'LineWidth', 1);
+        plot(avg*ones(size(doa_per_snapshot, 1)));
         % Moving Average
         %movAvg = movmean((doa_per_snapshot(:, at, ar)), 300); % Window of 10
         %plot(abs(movAvg), '--', 'LineWidth', 1);

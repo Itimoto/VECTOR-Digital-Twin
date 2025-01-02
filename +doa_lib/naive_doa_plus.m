@@ -91,6 +91,8 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
                 %{
                 % Correlation Method - Only on a Per-Element Basis 
                 % (No Spatial Correlation -- Doesn't Take Advantage of Multiple Antennas)
+                % Fact check this ^ Not sure if this is true; theory looks
+                % fine.
                 % Define possible angles to search through:
                 theta = linspace(0, 180, 180*3);
 
@@ -102,16 +104,19 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
 
                 [~, max_idx] = max(correlations);
                 doaMat(at, :, s, k) = theta(max_idx);
+                doaMUSIC(at, :, s, k) = correlations; % For further analysis
                 %}
+                
                 % MUSIC
                 % Define possible angles to search through:
                 theta = linspace(0, 180, 180*3);
-
+    
                 % Covariance Matrix:
                 %CSI = squeeze(Hest(at, :, s, :)); % Aggregate CSI over both space (AR) and time/snapshots (K)
                 % Extract CSI for the current window:
                 CSI = squeeze(Hest(at, :, s, k:(k + windowSize - 1)));
-                R = CSI * CSI';
+                %CSI = squeeze(Hest(at, :, :, k)); % Aggregate CSI over Subcarriers Only? - mixed/noisy results.
+                R = (1/size(CSI, 2)) * (CSI * CSI'); % Normalize it
 
                 % Eigen Decomposition
                 [eigenVectors, eigenValues] = eig(R);
@@ -133,6 +138,7 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
                 [~, max_idx] = max(musicSpectrum);
                 doaMat(at, :, s, k) = theta(max_idx);
                 doaMUSIC(at, :, s, k) = musicSpectrum; % For later analysis
+                
 
                 %{
                 % Another Correlation Method - Based on Matlab's fminunc
@@ -156,6 +162,16 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
     doa = doaK; % Average it out to yield a number
 
     % Plot doaMUSIC:
+    % Visualize a Single Snapshot
+    for k = 1:1
+        at = 1; s = 1;
+        figure;
+        theta = linspace(0, 180, 180*3);
+        plot(theta, doaMUSIC(at, 1:length(theta), s, k));
+        xlabel("Theta (deg)");
+        ylabel("Likelihood (dB)");
+        title("MUSIC Spectrum for each angle Theta (TX: "+at+", SC: "+s+", Snapshot:"+k);
+    end
     % Visualize over Snapshots:
     for s = 1:1
         at = 1;
@@ -168,7 +184,7 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
         xlabel("Snapshot (k)");
         ylabel("DOA (deg)");
         zlabel("Likelihood (dB)");
-        title("MUSIC Spectrum over Time for TX: "+at+" and SC: "+s);
+        title("(ML) Likelihood Pseudospectrum over Time for TX: "+at+" and SC: "+s);
     end
     % Visualize over Subcarriers:
     for k = 1:1
