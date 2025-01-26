@@ -1,120 +1,146 @@
-% Based off of Feature Extraction Example from `https://tns.thss.tsinghua.edu.cn/wst/docs/features`
-function [doa] = naive_music(Hest, elemPos, estRCO, fc, bw)
-    % Extracts DOA with the MUSIC Algorithm
-    % Yields DOA relative to Array Parallel (90 = Array Normal, 0 = Array Parallel)
+function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize)
+    % Return Direction of Arrival in Degrees via the ULA Steering Equation
+    %   DoA is given relative to the Array Parallel (doa = 90 corresponds to Array Normal)
+    %
+    % This is an alright approximation, given no noise and no multipath.
     %
     % DIMENSIONS OF INTEREST
-    %   - A: Number of RX Antenna Elements
-    %   - T: Number of CSI Packets              ~ assumed to be 1 for the time being
-    %   - S: Number of Subcarriers              ~ num_sc
+    %   AT  ~ Number of TX Antennas
+    %   AR  ~ Number of RX Antennas
+    %   S   ~ Number of Subcarriers
+    %   K   ~ Number of Snapshots
     %
-    % Input:
-    %   - Hest: CSI used for angle estimation   [A S]
-    %   - elemPos: Element Position             [3 A]
-    %   - estRCO: Estimated Radio Chain Offset  [A 1]
-    %   - fc: Channel Carrier Frequency (Hz)    (scalar)
-    %   - bw: Channel Bandwidth (Hz)            (scalar)
+    %
+    % INPUTS
+    % Hest      - CSI Matrix. Dimensions [AT AR S K]
+    % fc        - Scalar. Center/Carrier Frequency (Hz) (used to determine center wavelength)
+    % bw        - Scalar. Channel Bandwidth (Hz) (used to determine subcarrier wavelengths)
+    % elemPos   - Positions for each RX antenna [AR 3] (Assume a ULA)
+    % windowSize- The number of snapshots in each averaging window
+    %
     
-    %%% Prepare Data for Analysis
-    % Extract the Subcarrier Wavelengths
-    c = physconst('LightSpeed');
-    num_sc = size(Hest, 2); % Number of Subcarriers corresponds to that position in the Array
-    subcarrier_freq = linspace(fc-bw/2, fc+bw/2, num_sc);
-    subcarrier_lambda = c ./ subcarrier_freq;
+    % First, define our sizes & establish our Element Position Vector
+    [AT, AR, S, K] = size(Hest);
 
-    % Extract CSI Phase
-    csi_phase = unwrap(angle(Hest), [], 2); % [A S] Unwrap along the Subcarrier Axis
+    ulaPos = helper.signedDistances(elemPos); % Get signed distance from each element to the origin
+    ulaPos = ulaPos.';                        % Regular transpose for compatibility.
 
-    % Get the Antenna Vector and its length
-    ant_diff = elemPos(:, 2:end) - elemPos(:, 1);     % [3 A-1]
-    ant_diff_length = vecnorm(ant_diff);              % [1 A-1] (Distance from each antenna to the next antenna in array)
-    ant_diff_normalize = ant_diff ./ ant_diff_length; % [3 A-1]
-
-    % Calculate the Phase Difference
-    %%%phase_diff = csi_phase(:, 1) - permute(estRCO(2:end, :), [1 2]); % (apply RCO) [A S]
-    %{
-    phase_diff = csi_phase(2:end, :) - csi_phase(1, :) - permute(estRCO(2:end, :), [1 2]);                   % [A S]
-    phase_diff = unwrap(phase_diff, [], 2);
-    phase_diff = mod(phase_diff + pi, 2*pi) - pi;
-    %}
-
-    for j = 2:(size(Hest, 1))
-        % Check if the next trace on AP is higher/lower (from same STA antenna)
-        if csi_phase(j, 1) > csi_phase(j - 1, 1)
-            % Figure out the absolute difference to figure out which mult of 360 should be subtracted
-            interDiff = ceil(abs(csi_phase(j, 1) - csi_phase(j - 1, 1)) / (2*pi)); 
-            % Subtract 360 to put it all in the same area (to keep deltaPhi constant)
-            csi_phase(j, :) = csi_phase(j, :) - (2*pi)*interDiff;
+    % Determine the Subcarrier Wavelengths
+    c           = physconst('LightSpeed'); 
+    bw          = bw;
+    subcFreq    = linspace(fc-bw/2, fc+bw/2, S);
+    subcLambda  = c ./ subcFreq;                % Wavelength for each individual subcarrier
+    % Compute Array Manifold Vector
+    V = zeros(S, AR);
+    for s = 1:S
+        for ar = 1:AR
+            V(s, ar) = -1*2*pi*(ulaPos(ar))/subcLambda(s);
         end
     end
 
-    phase_diff = csi_phase(2:end, :) - csi_phase(1, :) - permute(estRCO(2:end, :), [1 2]);                   % [A S]
-    
-    % Broadcasting is performed, get the value of cos(theta) for each packet and each antenna pair
-    cos_mat = subcarrier_lambda .* phase_diff ./ (2 .* pi .* permute(ant_diff_length, [2 1]));
-    %cos_mat_mean = mean(cos_mat, [2]); % Along the Subcarrier Dimension
-    cos_mat_mean = cos_mat; %???
-
-    %%% Perform MUSIC Estimation
-    % Construct Signal Covariance MAtrix
-    lambda_R = 1e-3;  % Regularization parameter
-    R = cos_mat_mean * cos_mat_mean' + lambda_R * eye(size(cos_mat_mean, 1));
-    
-    % Eigenvalue Decomposition for MUSIC
-    [V, D] = eig(R);
-
-    % Sort Eigenvalues in Descending Order
-    [~, ind] = sort(diag(D), 'descend');
-    V = V(:, ind);
-
-    % Signal Subspace (Corresponding to largest eigenvalues)
-    signal_subspace = V(:, 1); % Choosing the number of signal sources (1 source - pick first column)
-
-    % MUSIC Spectrum Calculation
-    theta_vals = linspace(-90, 90, 180); % Range of angles from -90 to 90 degrees
-    music_spectrum = zeros(size(theta_vals));
-    
-    for i = 1:length(theta_vals)
-        % Calculate the steering vector for each angle (theta)
-        % Compute cos(theta) and sin(theta) for each antenna
-        steering_vec = exp(1j * 2 * pi * (cosd(theta_vals(i)) * ant_diff_normalize(1, :) + ...
-                                         sind(theta_vals(i)) * ant_diff_normalize(2, :)) .* ...
-                                         reshape(ant_diff_length, [1, numel(ant_diff_length)]) / c);
-        steering_vec = steering_vec(:); % Ensure it's a column vector
-        
-        % Calculate the MUSIC spectrum (inverse of the projection onto the noise subspace)
-        noise_subspace_projection = eye(size(V, 1)) - signal_subspace * signal_subspace';
-        
-        % Ensure the steering vector and the subspace projection are compatible
-        music_spectrum(i) = 1 / abs(steering_vec' * noise_subspace_projection * steering_vec);
+    % Iterate over each snapshot:
+    if nargin < 5
+        windowSize = 1;
     end
 
-    % Find the peak in the MUSIC spectrum
-    [~, peak_idx] = max(music_spectrum);
-    doa = theta_vals(peak_idx);     % DOA corresponding to the peak
+    doaMUSIC = zeros(AT, 180*3, S, K);
+    doaMat = zeros(AT, AR, S, K);
+    for k = 1:(K - windowSize + 1)
+        % Now, compute the DOA:
+        % For an array centered on the origin, finding the angle off of the
+        % array parallel...
+        % Remember - Array Manifold Vector is:
+        %   V(theta) = exp(-1j*(2pi/lambda)*[y0 y1 ... yN-1]*cos(theta))
+        % We model an incoming signal with:
+        %   y_at_ar = h_at_ar*X_at = (V(theta))*X_at, so we equate the two.
+        %   => cos(theta) = V(theta)/cos(theta) * h_at_ar
+        %
+        % We are estimating theta for each individual element, so we'll end
+        % up with a vector of theta corresponding to each individual element's estimate of DOA
+        for at = 1:AT
+            for s = 1:S                
+                % MUSIC
+                % Define possible angles to search through:
+                theta = linspace(0, 180, 180*3);
+    
+                % Covariance Matrix:
+                %CSI = squeeze(Hest(at, :, s, :)); % Aggregate CSI over both space (AR) and time/snapshots (K)
+                % Extract CSI for the current window:
+                CSI = squeeze(Hest(at, :, s, k:(k + windowSize - 1)));
+                %CSI = squeeze(Hest(at, :, :, k)); % Aggregate CSI over Subcarriers Only? - mixed/noisy results.
+                R = (1/size(CSI, 2)) * (CSI * CSI'); % Normalize it
 
-    % Add 90 degrees to convert to relative to Array Parallel
-    doa = doa + 90;
+                % Eigen Decomposition
+                [eigenVectors, eigenValues] = eig(R);
+                [~, idx] = sort(diag(eigenValues), 'descend');
+                eigenVectors = eigenVectors(:, idx); % Largest eigenvalue corresponds to Signal, lowest to noise
+                noiseSubspace = eigenVectors(:, 2:end);
 
-    %{
-    % Symbolic Nonlinear Optimization is performed:
-    syms x y
-    % aoa_sol = [x; y; (1-sqrt(x^2 + y^2)];
-    aoa_init = [sqrt(1/3); sqrt(1/3); sqrt(1/3)];
-    aoa_mat_sol = zeros(3, 1); % packet_num = 1
-    options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', 'Display', 'none');
+                % MUSIC Spectrum
+                musicSpectrum = zeros(length(theta), 1);
+                for t = 1:length(theta)
+                    V_test = exp(1j * V(s, :) .* cosd(theta(t)).').';
+                    musicSpectrum(t) = 1 / abs(V_test' * (noiseSubspace * noiseSubspace') * V_test);
+                end
 
-    cur_nonlinear_func = @(aoa_sol) ant_diff_normalize' * aoa_sol - cos_mat_mean';
-    cur_aoa_sol = lsqnonlin(cur_nonlinear_func, aoa_init, [], [], options);
-    aoa_mat_sol = cur_aoa_sol;
+                % Normalize (for Plotting/Testing Purposes)
+                musicSpectrum = 10 * log10(musicSpectrum / max(musicSpectrum));
 
-    % Yields an [x, y, z] unit vector pointing towards the Signal Source
-    doa_mat = aoa_mat_sol ./ vecnorm(aoa_mat_sol); % [3]
+                % Extract the maximum
+                [~, max_idx] = max(musicSpectrum);
+                doaMat(at, :, s, k) = theta(max_idx);
+                doaMUSIC(at, :, s, k) = musicSpectrum; % For later analysis
+            end
+        end
+    end
 
-    % Now, convert to Theta, Phi coordinates relative to Array Center
-    theta = atand(doa_mat(2) ./ doa_mat(1)); % Off Normal
-    phi   = acosd(doa_mat(3) ./ sqrt(doa_mat(1).^2 + doa_mat(2).^2 + doa_mat(3).^2)); % Off the Z-Axis
+    doaAR = mean(doaMat, 2);    % Average along the AR (Receive Antennas) dimensions
+    doaS  = mean(doaAR, 3);     % Average along the subcarriers
+    doaAT = mean(doaS, 1);      % Average between transmitters
+    doaK  = mean(doaAT, 4);     % Average through time
 
-    doa = theta + 90;
+    doa = doaK; % Average it out to yield a number
+
+    % Plot doaMUSIC:
+    % Visualize a Single Snapshot
+    %{ 
+    Implemented in the Plotting Folder.
+    for k = 1:1
+        at = 1; s = 1;
+        figure;
+        theta = linspace(0, 180, 180*3);
+        plot(theta, doaMUSIC(at, 1:length(theta), s, k));
+        xlabel("Theta (deg)");
+        ylabel("Likelihood (dB)");
+        title("MUSIC Spectrum for each angle Theta (TX: "+at+", SC: "+s+", Snapshot:"+k);
+    end
+    % Visualize over Snapshots:
+    for s = 1:1
+        at = 1;
+        figure;
+        theta = linspace(0, 180, 180*3);
+        snapshots = 1:(K - windowSize + 1);
+        [X, Y] = meshgrid(snapshots, theta);
+        musicSpectrum = squeeze(doaMUSIC(at, 1:length(theta), s, 1:length(snapshots)));
+        mesh(X, Y, musicSpectrum);
+        xlabel("Snapshot (k)");
+        ylabel("DOA (deg)");
+        zlabel("Likelihood (dB)");
+        title("MUSIC Spectrum over Time for TX: "+at+" and SC: "+s);
+    end
+    % Visualize over Subcarriers:
+    for k = 1:1
+        at = 1;
+        figure;
+        theta = linspace(0, 180, 180*3);
+        subcarriers = 1:S;
+        [X, Y] = meshgrid(subcarriers, theta);
+        musicSpectrum = squeeze(doaMUSIC(at, 1:length(theta), 1:S, k));
+        mesh(X, Y, musicSpectrum);
+        xlabel("Subcarrier (#)");
+        ylabel("DOA (deg)");
+        zlabel("Likelihood (dB)");
+        title("MUSIC Spectrum over Subcarrier for TX: "+at+" and Snapshot: "+k);
+    end
     %}
 end

@@ -13,8 +13,8 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
     %
     % INPUTS
     % Hest      - CSI Matrix. Dimensions [AT AR S K]
-    % fc        - Scalar. Center/Carrier Frequency (used to determine center wavelength)
-    % bw        - Scalar. Channel Bandwidth (used to determine subcarrier wavelengths)
+    % fc        - Scalar. Center/Carrier Frequency (Hz) (used to determine center wavelength)
+    % bw        - Scalar. Channel Bandwidth (Hz) (used to determine subcarrier wavelengths)
     % elemPos   - Positions for each RX antenna [AR 3] (Assume a ULA)
     %
     
@@ -26,6 +26,7 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
 
     % Determine the Subcarrier Wavelengths
     c           = physconst('LightSpeed'); 
+    bw          = bw;
     subcFreq    = linspace(fc-bw/2, fc+bw/2, S);
     subcLambda  = c ./ subcFreq;                % Wavelength for each individual subcarrier
     % Compute Array Manifold Vector
@@ -184,7 +185,7 @@ function [doa, doaMat, doaMUSIC] = naive_doa_plus(Hest, fc, bw, elemPos)
         xlabel("Snapshot (k)");
         ylabel("DOA (deg)");
         zlabel("Likelihood (dB)");
-        title("(ML) Likelihood Pseudospectrum over Time for TX: "+at+" and SC: "+s);
+        title("MUSIC Spectrum over Time for TX: "+at+" and SC: "+s);
     end
     % Visualize over Subcarriers:
     for k = 1:1

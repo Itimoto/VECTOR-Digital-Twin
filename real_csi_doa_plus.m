@@ -28,8 +28,14 @@ bw      = csiFile.chanBW;
 elemPos = csiFile.elemPos; 
 
 % Now, perform DOA
-[doa, doaMat, doaMUSIC] = doa_lib.naive_doa_plus(Hest, fc, bw, elemPos);
-doaK = mean(doaMat, 3);
+%[doa, doaMat, doaMUSIC] = doa_lib.naive_doa_plus(Hest, fc, bw, elemPos);
+%doaK = mean(doaMat, 3);
+
+musicAvgWindow = floor(size(Hest, 4)/20); % Based off `K`
+[doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, fc, bw, elemPos, musicAvgWindow);
+
+plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC", [0 180], musicAvgWindow);
+plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC", [0 180]);
 
 %{
 disp("Average DOA: " + doa);
@@ -76,6 +82,7 @@ end
 
 % Now, assuming we have Wonky MUSIC for subsystem demos:
 % Get rid of the last 0 (because of the window function):
+%{
 doaMat = doaMat(:, :, :, 1:find(any(any(any(doaMat, 1), 2), 3), 1, 'last')); % Get rid of the first 0 in trailing 0s
 disp("Average DoA: " + mean(squeeze(doaMat(1, 1, 1, :))));
 for at = 1:size(Hest, 1)
@@ -92,3 +99,4 @@ for at = 1:size(Hest, 1)
     xlabel("Snapshot (K)");
     ylabel("DOA off Array Parallel (Degrees)");    
 end
+%}
