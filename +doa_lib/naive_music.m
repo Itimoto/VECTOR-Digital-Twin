@@ -1,6 +1,8 @@
 function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize)
     % Return Direction of Arrival in Degrees via the ULA Steering Equation
     %   DoA is given relative to the Array Parallel (doa = 90 corresponds to Array Normal)
+    % NOTE - THIS ASSUMES ONLY ONE SIGNAL OF INTEREST! Theoretically can be
+    %   adjusted for >1 signal source
     %
     % This is an alright approximation, given no noise and no multipath.
     %
@@ -42,10 +44,11 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
     if nargin < 5
         windowSize = 1;
     end
+    lastValidK = K - windowSize + 1; % When using moving window, this will be the last 'real' snapshot index
 
     doaMUSIC = zeros(AT, 180*3, S, K);
     doaMat = zeros(AT, AR, S, K);
-    for k = 1:(K - windowSize + 1)
+    for k = 1:lastValidK
         % Now, compute the DOA:
         % For an array centered on the origin, finding the angle off of the
         % array parallel...
@@ -94,10 +97,11 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
         end
     end
 
-    doaAR = mean(doaMat, 2);    % Average along the AR (Receive Antennas) dimensions
-    doaS  = mean(doaAR, 3);     % Average along the subcarriers
-    doaAT = mean(doaS, 1);      % Average between transmitters
-    doaK  = mean(doaAT, 4);     % Average through time
+    % Average over doaMat.
+    doaAR = doaMat(:, 1, :, 1:lastValidK);  % Duplicates. Just need the first index
+    doaAT = mean(doaAR, 1);      % Average between the Transmitting Antennas
+    doaS  = mean(doaAT, 3);      % Average along the subcarriers
+    doaK  = mean(doaS,  4);      % Average over snapshots
 
     doa = doaK; % Average it out to yield a number
 
