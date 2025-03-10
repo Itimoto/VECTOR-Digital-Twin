@@ -22,20 +22,22 @@
 
 % Load the MAT file
 csiFile = load(fullfile(path, file));
-Hest    = csiFile.outputMatrix;
+Hest    = csiFile.outputMatrix; Hest = Hest(:, :, :, :);
 fc      = csiFile.centerFreq;
 bw      = csiFile.chanBW;
+subcFreq= csiFile.subcFreq;
 elemPos = csiFile.elemPos; 
 
-% Now, perform DOA
-%[doa, doaMat, doaMUSIC] = doa_lib.naive_doa_plus(Hest, fc, bw, elemPos);
-%doaK = mean(doaMat, 3);
+%musicAvgWindow = floor(size(Hest, 4)/20); % Based off `K`
+musicAvgWindow = 1;     % Averaging Window
+thetaRange = [65 115];   % Theta Range to Sample (MUSIC + Pseudospetra Plotting)
+plotting.plotCSI(Hest, "CSI from Datset", fc, bw);
+%[doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
+[doa, doaMat, doaMUSIC] = doa_lib.derandomized_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
 
-musicAvgWindow = floor(size(Hest, 4)/20); % Based off `K`
-[doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, fc, bw, elemPos, musicAvgWindow);
-
-plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC", [0 180], musicAvgWindow);
-plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC", [0 180]);
+plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC. DOA: "+num2str(doa)+"deg", thetaRange, musicAvgWindow);
+plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC. DOA: "+num2str(doa)+"deg", thetaRange);
+%plotting.plotCSI(Hest, "CSI from Datset. MUSIC DOA="+num2str(doa)+"deg", fc, bw*1e6);
 
 %{
 disp("Average DOA: " + doa);

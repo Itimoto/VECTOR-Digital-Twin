@@ -1,4 +1,4 @@
-function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize)
+function [doa, doaMat, doaMUSIC] = naive_music(Hest, subcFreq, elemPos, windowSize, thetaRange)
     % Return Direction of Arrival in Degrees via the ULA Steering Equation
     %   DoA is given relative to the Array Parallel (doa = 90 corresponds to Array Normal)
     % NOTE - THIS ASSUMES ONLY ONE SIGNAL OF INTEREST! Theoretically can be
@@ -15,10 +15,10 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
     %
     % INPUTS
     % Hest      - CSI Matrix. Dimensions [AT AR S K]
-    % fc        - Scalar. Center/Carrier Frequency (Hz) (used to determine center wavelength)
-    % bw        - Scalar. Channel Bandwidth (Hz) (used to determine subcarrier wavelengths)
+    % subcFreq  - Array. Dimensions [1 S]. Subcarrier Frequencies for each S (Hz)
     % elemPos   - Positions for each RX antenna [AR 3] (Assume a ULA)
     % windowSize- The number of snapshots in each averaging window
+    % thetaRange- [minAngle maxAngle] (deg) - Angles off of Array Parallel to run MUSIC on
     %
     
     % First, define our sizes & establish our Element Position Vector
@@ -29,9 +29,7 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
 
     % Determine the Subcarrier Wavelengths
     c           = physconst('LightSpeed'); 
-    bw          = bw;
-    subcFreq    = linspace(fc-bw/2, fc+bw/2, S);
-    subcLambda  = c ./ subcFreq;                % Wavelength for each individual subcarrier
+    subcLambda  = c ./ double(subcFreq);      % Wavelength for each individual subcarrier
     % Compute Array Manifold Vector
     V = zeros(S, AR);
     for s = 1:S
@@ -41,8 +39,12 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
     end
 
     % Iterate over each snapshot:
-    if nargin < 5
-        windowSize = 1;
+    if nargin < 6
+        thetaRange = [0 180]; % 0 to 180 degrees (full hemisphere) by default
+
+        if nargin < 5
+            windowSize = 1;
+        end
     end
     lastValidK = K - windowSize + 1; % When using moving window, this will be the last 'real' snapshot index
 
@@ -64,7 +66,7 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
             for s = 1:S                
                 % MUSIC
                 % Define possible angles to search through:
-                theta = linspace(0, 180, 180*3);
+                theta = linspace(thetaRange(1), thetaRange(2), 180*3);
     
                 % Covariance Matrix:
                 %CSI = squeeze(Hest(at, :, s, :)); % Aggregate CSI over both space (AR) and time/snapshots (K)
@@ -77,7 +79,7 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
                 [eigenVectors, eigenValues] = eig(R);
                 [~, idx] = sort(diag(eigenValues), 'descend');
                 eigenVectors = eigenVectors(:, idx); % Largest eigenvalue corresponds to Signal, lowest to noise
-                noiseSubspace = eigenVectors(:, 2:end);
+                noiseSubspace = eigenVectors(:, (1+1):end);
 
                 % MUSIC Spectrum
                 musicSpectrum = zeros(length(theta), 1);
@@ -88,6 +90,7 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, fc, bw, elemPos, windowSize
 
                 % Normalize (for Plotting/Testing Purposes)
                 musicSpectrum = 10 * log10(musicSpectrum / max(musicSpectrum));
+                %musicSpectrum = 10 * log10(musicSpectrum);
 
                 % Extract the maximum
                 [~, max_idx] = max(musicSpectrum);
