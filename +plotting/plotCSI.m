@@ -1,4 +1,4 @@
-function plotCSI(Hest, plottitle, fc, bw)
+function plotCSI(Hest, plottitle, subcFreq, fc, bw)
     % Plot the CSI given
     %
     % DIMENSIONS OF INTEREST
@@ -11,8 +11,9 @@ function plotCSI(Hest, plottitle, fc, bw)
     % INPUTS
     % Hest      - CSI Matrix. Dimensions [AT AR S] or [AT AR S K]
     % plottitle - String (Plot title)
-    % fc        - Scalar. Center/Carrier Frequency (Hz) (used to determine center wavelength)
-    % bw        - Scalar. Channel Bandwidth (Hz) (used to determine subcarrier wavelengths)
+    % subcFreq  - Array. Gives subcarrier frequency for each corresponding (S)ubcarrier
+    % fc        - (Optional/Legacy) Scalar. If no subcFreq given: Center/Carrier Frequency (Hz) (used to determine center wavelength)
+    % bw        - (Optional/Legacy) Scalar. If no subcFreq given: Channel Bandwidth (Hz) (used to determine subcarrier wavelengths)
     %
     % Example usage:
     %   Hest = Hest_Multi(:, :, :, 1); % [AT AR S K] Select the first snapshot
@@ -28,7 +29,11 @@ function plotCSI(Hest, plottitle, fc, bw)
         K = 1;
     end
 
-    if nargin > 2
+    if nargin == 3
+        % Given subcFreq
+        assert(length(subcFreq) == S, "ERROR! Subcarrier Frequency Array Length not equal to number of Subcarriers in input Hest matrix.");
+    elseif nargin > 3
+        % Given [], fc, bw
         % Determine the Subcarrier Frequencies
         c           = physconst('LightSpeed'); 
         bw          = bw;
@@ -105,7 +110,11 @@ function plotCSI(Hest, plottitle, fc, bw)
             for ar = 1:AR
                 color = baseColors(at, :) * (0.4 + 0.7 * (ar - 1) / (AR - 1)); % Adjust brightness
                 % The first term (0.4) sets minimum brightness, second term (0.6) sets range of brightness
-                plot(axPhase, xaxis, rad2deg(angle(squeeze(Hest(at, ar, :, k)))), ...
+                radangle = unwrap(angle(squeeze(Hest(at, ar, :, k))));
+                p = polyfit(xaxis, unwrap(angle(squeeze(Hest(at, ar, :, k)))), 1);
+                p(1)*2*pi*3e8*-1; % Distance from bulk delay
+                    
+                plot(axPhase, xaxis, (rad2deg(radangle)), ...
                     'Color', color, 'LineStyle', lineStyles{mod(at-1, length(lineStyles)) + 1}, 'LineWidth', 1);
                     %'Color', color, 'Marker', markerPatterns{mod(at-1, length(markerPatterns)) + 1}, 'LineWidth', 1);
                 leg = [leg, "AT-"+at+"|AR-"+ar];

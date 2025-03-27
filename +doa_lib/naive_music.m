@@ -39,10 +39,10 @@ function [doa, doaMat, doaMUSIC] = naive_music(Hest, subcFreq, elemPos, windowSi
     end
 
     % Iterate over each snapshot:
-    if nargin < 6
+    if nargin < 5
         thetaRange = [0 180]; % 0 to 180 degrees (full hemisphere) by default
 
-        if nargin < 5
+        if nargin < 4
             windowSize = 1;
         end
     end

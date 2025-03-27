@@ -46,22 +46,14 @@ function [doa, doaMat, doaMUSIC] = derandomized_music(Hest, subcFreq, elemPos, w
     [AT, AR, S, K] = size(Hest);
     T = 180*3; % Number of angles (T)heta sampled
 
-    if nargin < 5
-        windowSize = 3;
-    end
-    if windowSize < 3 % AT LEAST 3!
-        windowSize = 3;
-    end
-    lastValidK = K - windowSize + 1; % When using moving window, this will be the last 'real' snapshot index
-
     doaMUSIC = zeros(AT, T, S, K);
-    doaMat   = zeros(AT, AR, S, K);
-    for k = 1:lastValidK
+    doaMat   = zeros(AT, 1, S, K);
+    for k = 1:(K - 1) % One away from the end
         % For every frame...
 
-        doaMUSIC_compare = zeros(C, AT, T, S, windowSize);
-        for w = 1:(windowSize)
-            % We run through a small window into the future...
+        doaMUSIC_compare = zeros(C, AT, T, S, 2);
+        for w = 1:2
+            % We operate one frame into the future.
             
             for combo = 1:C
                 % And try every combination for that given frame...
@@ -73,84 +65,33 @@ function [doa, doaMat, doaMUSIC] = derandomized_music(Hest, subcFreq, elemPos, w
             end
         end
 
-        % Now, we wish to figure out which sets of frames are the most similar.
-        % We choose the starting frame with the least change over each of the frames in the window:
-        %{
-        similarityMatrix = zeros(C, C, windowSize);
-        secondPeakMagnitudes   = zeros(C, windowSize);
-        for w = 1:1%(windowSize-1)
-            for combo1 = 1:C
-                if k == 1
-                    % For the first frame, we iterate through each possibility
-                    frame1 = reshape(doaMUSIC_compare(combo1, :, :, :, w), [], 1);
-                else
-                    frame1 = reshape(frame1_prev(1, :, :, :, 1), [], 1);
-                end
-
-                for combo2 = 1:C
-                    frame2 = reshape(doaMUSIC_compare(combo2, :, :, :, w+1), [], 1);
-                    
-                    % Determine the similarity between these two matrices:
-                    similarityMatrix(combo1, combo2, w) = dot(frame1(:), frame2(:)) / (norm(frame1(:)) * norm(frame2(:))); 
-                end
-
-                % Find magnitude of second (normalized) peak, averaged across subcarriers
-                avgSecondPeakMag = zeros(1, S);
-                for s = 1:S
-                    [pkAmp, pkIdx] = findpeaks(squeeze(doaMUSIC_compare(combo1, 1, :, s, w)));
-                    [~, idx] = sort(pkAmp, 'descend');
-                    if length(idx) > 1
-                        avgSecondPeakMag(s) = pkAmp(idx(2));
-                    end
-                end
-                secondPeakMagnitudes(combo1, w) = mean(avgSecondPeakMag);
-            end
-        end
-        %}
-
         if k == 1
-            framePrev = squeeze(doaMUSIC_compare(1, 1, :, :, 1));
+            %framePrev = squeeze(doaMUSIC_compare(1, 1, :, :, 1));
+            framePrev = permute(doaMUSIC_compare(1, 1, :, :, 1), [3 4 1 2 5]); % Remove 1, 2, & 5 dimensions
             likelyC = 1; % Pick the first one, for now.
         else 
             similarityArr = zeros(1, C);
             for comboCurr = 1:C
-                frameCurr = squeeze(doaMUSIC_compare(comboCurr, 1, :, :, 1));
-
+                %frameCurr = squeeze(doaMUSIC_compare(comboCurr, 1, :, :, 1));
+                frameCurr = permute(doaMUSIC_compare(comboCurr, 1, :, :, 1), [3 4 1 2 5]); % Remove 1, 2, & 5 dimensions
+            
                 similarityArr(comboCurr) = mean((framePrev - frameCurr).^2, 'all'); % Get MSE
             end
             [~, likelyC] = min(similarityArr); % Get min MSE along axis (smaller = more similar)
         end
         
-        %[~, likelyC] = max(max(max(similarityMatrix, [], 3), [], 2), [], 1);
-        % Prep for next iteration:
-        %frame1_prev = doaMUSIC_compare(likelyC, :, :, :, :); %reshape(doaMUSIC_compare(likelyC, :, :, :, 1), [], 1);
-        %[~, likelyC] = min(min(secondPeakMagnitudes, [], 2), [], 1);
-
-        %for combo = 1:C
-        %    doaMUSIC_tmp = squeeze(doaMUSIC_compare(combo, :, :, :, :));
-        %    plotting.plotDoA_overSubcarriers(doaMUSIC_tmp, "DOA ESTIMATE - "+num2str(combo), thetaRange);
-        %    colorbar;
-        %end
-
-
-        % Assuming non-normalized spectra, we pick the 'most likely' combo:
-        % First maximum along AT, then along Subcarriers, then along Theta, and finally between the different combinations.
-        %[~, likelyC] = max(max(max(max(doaMUSIC_compare(:, :, :, :, 1), [], 2), [], 4), [], 3), [], 1);
-        
         % Deposit the `likelyC` exactly the same way that `naive_music` does.
         theta = linspace(thetaRange(1), thetaRange(2), T);
-        for at = 1:AT
-            for s = 1:S
-                musicSpectrum = doaMUSIC_compare(likelyC, at, :, s, 1);
-                [~, max_idx] = max(musicSpectrum);
-                doaMat(at, :, s, k) = theta(max_idx);
-                doaMUSIC(at, :, s, k) = musicSpectrum;
-            end
-        end
+        %musicSpectrum = reshape(doaMUSIC_compare(likelyC, :, :, :, 1), [], S);
+        %musicSpectrum = squeeze(doaMUSIC_compare(likelyC, :, :, :, 1));
+        musicSpectrum = permute(doaMUSIC_compare(likelyC, :, :, :, 1), [2 3 4 1 5]); % Effectively truncate 1st & 5th dim.
+        [~, max_idx] = max(musicSpectrum, [], 2);
+        doaMat(:, 1, :, k) = repmat(theta(max_idx), [1, size(doaMat, 2), 1]);
+        doaMUSIC(:, :, :, k) = musicSpectrum;
     end
 
     % Average over doaMat.
-    doaAR = doaMat(:, 1, :, 1:lastValidK);  % Duplicates. Just need the first index
+    doaAR = doaMat(:, 1, :, 1:(K-1));  % Duplicates. Just need the first index
     doaAT = mean(doaAR, 1);      % Average between the Transmitting Antennas
     doaS  = mean(doaAT, 3);      % Average along the subcarriers
     doaK  = mean(doaS,  4);      % Average over snapshots

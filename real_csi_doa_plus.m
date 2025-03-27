@@ -19,21 +19,24 @@
 % Navigate to the CSI file:
 [file, path] = uigetfile('*.mat',...
                     'Select the CSI file [AT AR S K]'); % Stores an `outputMatrix` of the correct dimensions
+disp("Loading File: "+file);
 
 % Load the MAT file
 csiFile = load(fullfile(path, file));
-Hest    = csiFile.outputMatrix; Hest = Hest(:, :, :, :);
+Hest    = csiFile.outputMatrix; Hest = Hest(:, :, :, 1:30);
 fc      = csiFile.centerFreq;
 bw      = csiFile.chanBW;
 subcFreq= csiFile.subcFreq;
 elemPos = csiFile.elemPos; 
 
 %musicAvgWindow = floor(size(Hest, 4)/20); % Based off `K`
-musicAvgWindow = 1;     % Averaging Window
+musicAvgWindow = 2;     % Averaging Window
 thetaRange = [65 115];   % Theta Range to Sample (MUSIC + Pseudospetra Plotting)
 plotting.plotCSI(Hest, "CSI from Datset", fc, bw);
-%[doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
-[doa, doaMat, doaMUSIC] = doa_lib.derandomized_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
+DOAPROCTIMER = tic;
+[doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
+%[doa, doaMat, doaMUSIC] = doa_lib.derandomized_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
+DOAPROCELAPSED = toc(DOAPROCTIMER); disp("Time Spent Processing: "+num2str(DOAPROCELAPSED) + "sec");
 
 plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC. DOA: "+num2str(doa)+"deg", thetaRange, musicAvgWindow);
 plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC. DOA: "+num2str(doa)+"deg", thetaRange);
