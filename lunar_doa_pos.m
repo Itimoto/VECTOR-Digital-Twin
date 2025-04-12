@@ -31,17 +31,17 @@ close all;
 filename = "env-models/Copernicuscrater3Xv.stl";
 
 c = physconst('lightspeed');
-fc = 5.8e9; % Carrier frequency
+fc = 2.447e9; % Carrier frequency
 lambda = c/fc;
-spacing = 3/4; % 3/4 Lambda Spacing
+spacing = 0.079961058/lambda; % 3/4 Lambda Spacing
 
 numSTAant = 1;  % # of Transmit Antennas (on User Terminal)
 numAPant = 4;   % # of Receive Antennas (on Base Station)
 txArray = arrayConfig("Size",[1 numSTAant],"ElementSpacing",spacing*lambda);
 rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
-R_a = 2; % Linear Distance between TX and RX
-beta_a = 90-5; % Direction of TX, with respect to RX (in degrees)
+R_a = 1.5; % Linear Distance between TX and RX
+beta_a = 105; % Direction of TX, with respect to RX (in degrees)
             % 0 degrees is parallel to the array, on the right-hand side
             %   relative to the X-Z plane visualized by `helperViewArray`
             % 10 degrees moves clockwise about the Z axis 
