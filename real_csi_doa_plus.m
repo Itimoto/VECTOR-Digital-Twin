@@ -23,7 +23,7 @@ disp("Loading File: "+file);
 
 % Load the MAT file
 csiFile = load(fullfile(path, file));
-Hest    = csiFile.outputMatrix; Hest = Hest(:, :, :, 1:30);
+Hest    = csiFile.outputMatrix; Hest = Hest(:, :, :, 1:50);
 fc      = csiFile.centerFreq;
 bw      = csiFile.chanBW;
 subcFreq= csiFile.subcFreq;
@@ -32,7 +32,7 @@ elemPos = csiFile.elemPos;
 %musicAvgWindow = floor(size(Hest, 4)/20); % Based off `K`
 musicAvgWindow = 2;     % Averaging Window
 thetaRange = [65 115];   % Theta Range to Sample (MUSIC + Pseudospetra Plotting)
-plotting.plotCSI(Hest, "CSI from Datset", fc, bw);
+plotting.plotCSI(Hest, "CSI from Datset", subcFreq, fc, bw);
 DOAPROCTIMER = tic;
 [doa, doaMat, doaMUSIC] = doa_lib.naive_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);
 %[doa, doaMat, doaMUSIC] = doa_lib.derandomized_music(Hest, subcFreq, elemPos, musicAvgWindow, thetaRange);

@@ -1,8 +1,18 @@
+clear all;
+%% DOA ESTIMATOR - MOVING POSITION - CARRIER FREQUENCY OFFSET APPLIED
+CFO = 1000; % (Hz) - TX to RX
+PERM_ARRAY = [[2 3];[1 4]];
+%INTER_CFO = [-1000, 2500];
+INTER_CFO = [0, 0];
+MIN_SWITCH_TIME = inf; % Flip a coin every this many seconds. `inf` to turn off.
+
+EBNO_IN = 10;
+NUM_REFLECTIONS = 0; % 0 for LoS
+
 %% MIMO-OFDM Raytracing Comm CSI Generator
+% Notes - Specify 
 % Combination of MIMO-OFDM example: https://www.mathworks.com/help/comm/ug/indoor-mimo-ofdm-communication-link-using-ray-tracing.html
 % and 802.11az Positioning example: https://www.mathworks.com/help/wlan/ug/802-11az-indoor-positioning-using-super-resolution-time-of-arrival-estimation.html
-
-clear all;
 %close all;
 %clc;
 
@@ -17,20 +27,25 @@ numAPant  = 4; % # of Receive Antennas (on Base Station / AP)
 txArray = arrayConfig("Size",[1 numSTAant],"ElementSpacing",spacing*lambda);
 rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
-% Specify a transmitter site close to the upper corner of the room, which
-% can be a WiFi accesss point
-tx = txsite("cartesian", ...
-    "Antenna",txArray, ...
-    'TransmitterFrequency',fc);
-
-rx = rxsite("cartesian", ...
-    "Antenna",rxArray, ...
-    "AntennaAngle",[0; 0]);
-
 % Use the siteviewer function with the map file specified to view the scene
 % in 3D. Use show function to visualize the transmitters and receivers
-%siteviewer("Terrain", 'none', "Hidden",true); % To have 'nothing' / empty space
-siteviewer("SceneModel","conferenceroom.stl"); % Uncomment to simulate multipath
+%siteviewer("Terrain", 'none', "Hidden",true); COORDSYS="cartesian";% To have 'nothing' / empty space
+siteviewer("SceneModel","conferenceroom.stl"); COORDSYS="cartesian";% Uncomment to simulate multipath
+%site = siteviewer("Hidden",true, Basemap="openstreetmap", Buildings="manhattan.osm"); COORDSYS="geographic";
+
+% Specify a transmitter site close to the upper corner of the room, which
+% can be a WiFi accesss point
+tx = txsite(...
+    COORDSYS, ...%"geographic" or "cartesian"
+    "Antenna",txArray, ...
+    'TransmitterFrequency',fc,...
+    'AntennaHeight',1);
+
+rx = rxsite( ...
+    COORDSYS,...
+    "Antenna",rxArray, ...
+    "AntennaAngle",[0; 0],...
+    "AntennaHeight",1);
 
 %% Physical Locations
 % R_a    ~ Linear Distance from TX to RX (m)
@@ -40,19 +55,19 @@ siteviewer("SceneModel","conferenceroom.stl"); % Uncomment to simulate multipath
 %           10 degrees moves clockwise about the Z axis
 % dt     ~ Time step in between each snapshot (s)
 ft2m = 0.3048; % Feet to Meters
-startPt = 0.2; endPt = 3;
-R_a = [repmat([startPt*ft2m], 1, 50) linspace(startPt*ft2m, endPt*ft2m, 100) repmat([endPt*ft2m], 1, 50)];
-b_a = repmat([90], 1, length(R_a)); % Just have it run at boresight for now
+startPt = 5; endPt = 3;
+R_a = [repmat([startPt*ft2m], 1, 50)];
+b_a = repmat([105], 1, length(R_a)); % Just have it run at boresight for now
 %b_a = [90 90 90 91 92 93 94 95 96 97 98 99 100 100 100 100 100 100 100];
 %R_a = repmat([1], 1, length(b_a));
-dt  = 0.5;
+dt  = 0.23;
 timestamps = (1:length(R_a))*dt; % For tracking/inducing Carrier Frequency Offset
 
 %% Additional Channel Parameters (e.g. SNR)
 % Assign Eb/No value and derive SNR value from it for AWGN
 bitsPerCarrier = 6; % Suppose we're using 64-QAM, which exists for 802.11ac & az
 codeRate = 2/3;     % worst case 1/2, best case 5/6
-EbNo = 10; % In dB
+EbNo = EBNO_IN; % In dB
 SNR = convertSNR(EbNo,"ebno", ...
   "BitsPerSymbol",bitsPerCarrier, ... % worst case 1, best case 10
   "CodingRate",codeRate);             % worst case 1/2, best case 5/6  
@@ -105,10 +120,6 @@ RandStream.setGlobalStream(stream);
 % Define SNR per active subcarrier to account for noise energy in nulls
 snrVal = SNR - 10*log10(ofdmInfo.FFTLength/ofdmInfo.NumTones);
 
-% Range-based delay
-delay = distance(tx, rx)/c; % Divide out the speed of light
-sampleDelay = delay*sampleRate;
-
 linkType = ["Uplink","Downlink"];
 % ToD of UL NDP (t1)
 todUL = randsrc(1,1,0:1e-9:1e-6);
@@ -123,16 +134,25 @@ disp("Starting simulation...")
 for k = 1:numSnapshots
     disp("Simulating Snapshot "+string(k)+" of "+string(numSnapshots));
     %% Place TX/RX Down:
-    tx.AntennaPosition = [R_a(k)*cos(deg2rad(b_a(k) - 90)); R_a(k)*sin(deg2rad(b_a(k) - 90)); 0.2];% Place TX Antenna some distance away
-    rx.AntennaPosition = [0; 0; 0.3]; % Place RX Antenna at the origin  
+    if COORDSYS == "cartesian"
+        tx.AntennaPosition = [R_a(k)*cos(deg2rad(b_a(k) - 90)); R_a(k)*sin(deg2rad(b_a(k) - 90)); 0.2];% Place TX Antenna some distance away
+        rx.AntennaPosition = [0; 0; 0.3]; % Place RX Antenna at the origin  
+    elseif COORDSYS == "geographic"
+        rx.Latitude = 40.7089; rx.Longitude = -74.009; rx.AntennaAngle = [0 0];
+        [tx.Latitude, tx.Longitude] = helper.offsetLatLon(rx.Latitude, rx.Longitude, R_a(k), 180-b_a(k)); % Assuming RX is pointed northward.
+    end
+
+    % Range-based delay
+    delay = distance(tx, rx)/c; % Divide out the speed of light
+    sampleDelay = delay*sampleRate;
 
     %% Set up Raytracing Model (Shooting & Bouncing Rays / SBR)
     pm = propagationModel("raytracing", ...
-    "CoordinateSystem","cartesian", ...
+    "CoordinateSystem",COORDSYS, ...
     "Method","sbr", ...
     "AngularSeparation","low", ...
     "SurfaceMaterial","concrete");
-    pm.MaxNumReflections = 10; % If 0: No reflections, LOS only
+    pm.MaxNumReflections = NUM_REFLECTIONS; % If 0: No reflections, LOS only
     
     rays = raytrace(tx,rx,pm);
     
@@ -190,11 +210,20 @@ for k = 1:numSnapshots
         % Introduce time delay (fractional and integer) in the transmit waveform
         txDelay = ranging.heDelaySignal(txWaveform, sampleDelay);
     
+        % Introduce Center Frequency Offset in the transmit waveform
+        txCFO = nonideal.freqOffsetSignalWithTime(txDelay, CFO, sampleRate, (k-1)*dt);
+
         % Pad signal and pass through multipath channel (that's the raytraced channel!)
-        [txMultipath, CIR] = chan(txDelay); % <-- This is the key change to the 802.11az example!
-    
+        [txMultipath, CIR] = chan(txCFO); % <-- This is the key change to the 802.11az example!
+
+        % Introduce Inter-NIC CFO between the outer two traces (connected to the NIC)
+        txInterCFO = nonideal.applyInterCFO(txMultipath, PERM_ARRAY, INTER_CFO, sampleRate, (k-1)*dt);
+
+        % Swap 'Antennas' Internally
+        txSwapped = nonideal.swapTracesRandom(txInterCFO, PERM_ARRAY, MIN_SWITCH_TIME, sampleRate, (k-1)*dt);
+
         % Pass waveform through AWGN channel
-        rxWaveform = awgn(txMultipath,snrVal);
+        rxWaveform = awgn(txSwapped,snrVal);
     
         % Perform synchronization and channel estimation
         [chanEstActiveSC,integerOffset] = ranging.heRangingSynchronize(rxWaveform,cfg); % << chanEstActiveSC looks like it could be CSI!
@@ -242,7 +271,6 @@ for k = 1:numSnapshots
 end
 
 %% Determine DOA via MUSIC Method
-%{
 disp("Starting DOA Estimation...");
 Hest = Hest_Multi;
 Hest(Hest(1, 1, 1, :) == 0) = []; % Remove dropped frames (if any were found)
@@ -255,11 +283,17 @@ thetaRange = [65 115];
 % Plot DOA from MUSIC:
 plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC", [65 115], musicAvgWindow);
 plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC", [65 115]);
-%}
 
 % Set up plots
 %% Plot CSI from generated by Ranging Process
 plotting.plotCSI(Hest_Multi, "CSI Estimation from Ranging Process", subcFreq_Multi(:, 1));
+
+%% Plot Rays in Siteviewer:
+%siteviewer(Basemap="openstreetmap", Buildings="manhattan.osm");
+show(tx, "ShowAntennaHeight",false)
+show(rx, "ShowAntennaHeight",false)
+pattern(rx, fc); 
+plot(rays,"Colormap",jet,"ColorLimits",[50, 95]);
 
 % Save CSI to simulate with VECTOR System
 if upper(input("Save CSI? (y for yes): ", "s")) == 'Y'
@@ -274,8 +308,10 @@ if upper(input("Save CSI? (y for yes): ", "s")) == 'Y'
     save(string(filename)+'.mat', 'centerFreq', 'chanBW', 'elemPos', 'outputMatrix', 'subcFreq', 'timestamps');
 end
 
+%{
 diffs = zeros(numSnapshots-1, 1);
 for k = 2:numSnapshots
     diffs(k) = angle(Hest_Multi(1, 1, 1, k)) - angle(Hest_Multi(1, 1, 1, k-1));
 end
 figure; plot(unwrap(diffs));
+%}
