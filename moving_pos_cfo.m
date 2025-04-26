@@ -2,12 +2,12 @@ clear all;
 %% DOA ESTIMATOR - MOVING POSITION - CARRIER FREQUENCY OFFSET APPLIED
 CFO = 1000; % (Hz) - TX to RX
 PERM_ARRAY = [[2 3];[1 4]];
-%INTER_CFO = [-1000, 2500];
-INTER_CFO = [0, 0];
+INTER_CFO = [-1000, 2500];
+%INTER_CFO = [0, 0];
 MIN_SWITCH_TIME = inf; % Flip a coin every this many seconds. `inf` to turn off.
 
 EBNO_IN = 10;
-NUM_REFLECTIONS = 0; % 0 for LoS
+NUM_REFLECTIONS = 10; % 0 for LoS
 
 %% MIMO-OFDM Raytracing Comm CSI Generator
 % Notes - Specify 
@@ -29,6 +29,8 @@ rxArray = arrayConfig("Size",[1 numAPant],"ElementSpacing",spacing*lambda);
 
 % Use the siteviewer function with the map file specified to view the scene
 % in 3D. Use show function to visualize the transmitters and receivers
+%filename = "env-models/Copernicuscrater3Xv.stl"; % (pulled from https://nasa3d.arc.nasa.gov/detail/copernicus-crater)
+%siteviewer(SceneModel=filename, ShowEdges=false); COORDSYS="cartesian"; % Uncomment for custom STL
 %siteviewer("Terrain", 'none', "Hidden",true); COORDSYS="cartesian";% To have 'nothing' / empty space
 siteviewer("SceneModel","conferenceroom.stl"); COORDSYS="cartesian";% Uncomment to simulate multipath
 %site = siteviewer("Hidden",true, Basemap="openstreetmap", Buildings="manhattan.osm"); COORDSYS="geographic";
@@ -57,7 +59,7 @@ rx = rxsite( ...
 ft2m = 0.3048; % Feet to Meters
 startPt = 5; endPt = 3;
 R_a = [repmat([startPt*ft2m], 1, 50)];
-b_a = repmat([105], 1, length(R_a)); % Just have it run at boresight for now
+b_a = repmat([72], 1, length(R_a)); % Just have it run at boresight for now
 %b_a = [90 90 90 91 92 93 94 95 96 97 98 99 100 100 100 100 100 100 100];
 %R_a = repmat([1], 1, length(b_a));
 dt  = 0.23;
@@ -135,8 +137,10 @@ for k = 1:numSnapshots
     disp("Simulating Snapshot "+string(k)+" of "+string(numSnapshots));
     %% Place TX/RX Down:
     if COORDSYS == "cartesian"
-        tx.AntennaPosition = [R_a(k)*cos(deg2rad(b_a(k) - 90)); R_a(k)*sin(deg2rad(b_a(k) - 90)); 0.2];% Place TX Antenna some distance away
-        rx.AntennaPosition = [0; 0; 0.3]; % Place RX Antenna at the origin  
+        rx.AntennaPosition = [0; 0; 0.3]; % Place RX Antenna at the origin   
+        %rx.AntennaPosition = [287.5; 0.2; 5.305]; % Place RX Antenna at the origin of the lunar STL   
+        tx.AntennaPosition = [R_a(k)*cos(deg2rad(b_a(k) - 90)); R_a(k)*sin(deg2rad(b_a(k) - 90)); -(0.2-0.3)];%-0.005];% Place TX Antenna some distance away
+        tx.AntennaPosition = tx.AntennaPosition + rx.AntennaPosition; % Place TX relative to rx
     elseif COORDSYS == "geographic"
         rx.Latitude = 40.7089; rx.Longitude = -74.009; rx.AntennaAngle = [0 0];
         [tx.Latitude, tx.Longitude] = helper.offsetLatLon(rx.Latitude, rx.Longitude, R_a(k), 180-b_a(k)); % Assuming RX is pointed northward.
@@ -163,9 +167,9 @@ for k = 1:numSnapshots
     %{
     show(tx, "ShowAntennaHeight",false)
     show(rx, "ShowAntennaHeight",false)
-    pattern(rx, fc); 
+    %pattern(rx, fc); 
     plot(rays,"Colormap",jet,"ColorLimits",[50, 95]);
-    input("Good?");
+    %input("Good?");
     %}
 
     %% Deterministic Channel Model

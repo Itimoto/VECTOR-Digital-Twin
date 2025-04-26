@@ -141,6 +141,7 @@ cfgAPBase.GuardInterval = 1.6;
 
 ofdmInfo = wlanHEOFDMInfo('HE-LTF',chanBW,cfgSTABase.GuardInterval);
 sampleRate = wlanSampleRate(chanBW);
+subcarrierSpacing = sampleRate/ofdmInfo.FFTLength;
 
 % Miscellaneous channel config variables
 chBaseInfo = info(rtChan);
@@ -212,6 +213,7 @@ for l = 1:numLinks
 
     % Perform synchronization and channel estimation
     [chanEstActiveSC,integerOffset] = ranging.heRangingSynchronize(rxWaveform,cfg); % << chanEstActiveSC looks like it could be CSI!
+    subcFreq = fc + ofdmInfo.ActiveFrequencyIndices*subcarrierSpacing;
 
     % Estimate the transmission time between UL and DL
     if ~isempty(chanEstActiveSC) % If packet detection is successful
@@ -253,6 +255,20 @@ Hest = chanEstActiveSC;
 phase_differences = rad2deg(angle(Hest(:,1,1:4)) - angle(Hest(:,1,[2:4, 1])));
 phase_differences = mod(phase_differences + 180, 360) - 180; % Adjust the result to be within -180 and 180 degrees
 doa = mean(rad2deg(acos(deg2rad(phase_differences)/(2*pi*spacing)))); % pull doa from apa eqn
+
+%% Determine DOA via MUSIC Method
+disp("Starting DOA Estimation...");
+Hest = chanEstActiveSC;
+Hest(Hest(1, 1, 1, :) == 0) = []; % Remove dropped frames (if any were found)
+subcFreq = subcFreq; % Use the first, assume no change occurs.
+rxElemPos = helper.getElementPosition(rxArray).'; % Extract Element Positions
+musicAvgWindow = 2;
+thetaRange = [65 115];
+
+[doa_music, doaMat_music, doaMUSIC] = doa_lib.naive_music(Hest, subcFreq, rxElemPos, musicAvgWindow, thetaRange);
+% Plot DOA from MUSIC:
+plotting.plotDoA_overSnapshots(doaMUSIC, "DOA Estimate via MUSIC", [65 115], musicAvgWindow);
+plotting.plotDoA_overSubcarriers(doaMUSIC, "DOA Estimate via MUSIC", [65 115]);
 
 %% Display results
 disp(['At SNR = ', num2str(SNR), ' dB, estimated distance ', ...
